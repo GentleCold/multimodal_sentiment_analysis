@@ -156,7 +156,7 @@ class Model:
         tag_list = []
 
         with torch.no_grad():
-            for guid, txt, txt_mask, image, label in self.data.test_loader:
+            for guid, txt, txt_mask, image, label in tqdm(self.data.test_loader):
                 txt = txt.to(DEVICE)
                 txt_mask = txt_mask.to(DEVICE)
                 image = image.to(DEVICE)
@@ -165,8 +165,10 @@ class Model:
                 self.optimizer.zero_grad()
                 output = self.model(txt, txt_mask, image)
                 pred = output.argmax(dim=1)
-                guid_list.append(guid)
-                tag_list.append(ID2EMOTION[pred.item()])
+
+                guid_list.extend(guid)
+                emotion = [ID2EMOTION[p.item()] for p in pred]
+                tag_list.extend(emotion)
 
         df = pd.DataFrame({"guid": guid_list, "tag": tag_list})
         df.to_csv(f"{output_loc}/test_with_predict.txt", index=False)

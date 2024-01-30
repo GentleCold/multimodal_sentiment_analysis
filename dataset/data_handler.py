@@ -76,13 +76,24 @@ class DataHandler:
         return guid, padded_txt, txt_mask, img, tag
 
     def get_dataloader(self):
+        print("===== Data Info =====")
         samples = pd.read_csv(f"{dataset_loc}/train.txt")
+        print(samples["tag"].value_counts())
+
         train_samples, val_samples = train_test_split(
             samples, test_size=0.2, random_state=SEED
         )
+        test_samples = pd.read_csv(f"{dataset_loc}/test_without_label.txt").fillna(
+            "null"
+        )
+
         self.train_size = len(train_samples)
         self.val_size = len(val_samples)
-        test_samples = pd.read_csv(f"{dataset_loc}/test_without_label.txt")
+        self.test_size = len(test_samples)
+
+        print("\nTrain size:", self.train_size)
+        print("Val size:", self.val_size)
+        print("Test size:", self.test_size, "\n")
 
         train_data = MultimodalDataset(train_samples, self.tokenizer)
         val_data = MultimodalDataset(val_samples, self.tokenizer)
