@@ -9,4 +9,6 @@ if __name__ == "__main__":
     model.train()
     end_time = time.time()
 
-    print("Training time: ", end_time - start_time)
+    print("Training time:", end_time - start_time)
+
+    model.save_test_result()
