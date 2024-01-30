@@ -156,11 +156,10 @@ class Model:
         tag_list = []
 
         with torch.no_grad():
-            for guid, txt, txt_mask, image, label in tqdm(self.data.test_loader):
+            for guid, txt, txt_mask, image, _ in tqdm(self.data.test_loader):
                 txt = txt.to(DEVICE)
                 txt_mask = txt_mask.to(DEVICE)
                 image = image.to(DEVICE)
-                label = label.to(DEVICE)
 
                 self.optimizer.zero_grad()
                 output = self.model(txt, txt_mask, image)

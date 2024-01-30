@@ -18,11 +18,8 @@ class MultimodalDataset(IterableDataset):
     def __init__(self, samples, tokenizer):
         self.data = samples
         self.tokenizer = tokenizer
+        self.samples = []
 
-    def __len__(self):
-        return len(self.data)
-
-    def __iter__(self):
         for guid, tag in zip(self.data["guid"], self.data["tag"]):
             # load img
             img = Image.open(f"{dataset_loc}/data/{guid}.jpg")
@@ -41,8 +38,14 @@ class MultimodalDataset(IterableDataset):
                 txt = txt.replace("#", "")
 
             txt = self.tokenizer.encode(txt, add_special_tokens=True)
+            self.samples.append((guid, txt, img, EMOTION2ID[tag]))
 
-            yield guid, txt, img, EMOTION2ID[tag]
+    def __len__(self):
+        return len(self.data)
+
+    def __iter__(self):
+        for bundles in self.samples:
+            yield bundles
 
 
 class DataHandler:
@@ -55,12 +58,18 @@ class DataHandler:
 
     @staticmethod
     def _collate_fn(batch):
-        guid = [sample[0] for sample in batch]
-        txt = [sample[1] for sample in batch]
-        img = [np.array(sample[2]).tolist() for sample in batch]
-        tag = [sample[3] for sample in batch]
+        guid = []
+        txt = []
+        img = []
+        tag = []
+        max_len = 0
+        for sample in batch:
+            guid.append(sample[0])
+            txt.append(sample[1])
+            max_len = max(max_len, len(sample[1]))
+            img.append(np.array(sample[2]).tolist())
+            tag.append(sample[3])
 
-        max_len = max(len(t) for t in txt)
         padded_txt = []
         txt_mask = []
         for t in txt:
@@ -94,6 +103,7 @@ class DataHandler:
         print("\nTrain size:", self.train_size)
         print("Val size:", self.val_size)
         print("Test size:", self.test_size, "\n")
+        print("Loading dataset...\n")
 
         train_data = MultimodalDataset(train_samples, self.tokenizer)
         val_data = MultimodalDataset(val_samples, self.tokenizer)
