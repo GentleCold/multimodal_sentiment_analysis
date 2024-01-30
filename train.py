@@ -27,7 +27,7 @@ class Model:
     def __init__(
         self,
         max_epochs=30,
-        learning_rate=0.001,
+        learning_rate=1e-5,
         batch_size=8,
         model="bert_concat_resnet",
     ):
@@ -39,14 +39,8 @@ class Model:
             self.model = BertConcatResnet().to(DEVICE)
 
         self.optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=0)
+        self.criterion = nn.CrossEntropyLoss()
         self.train_loader, self.val_loader = get_dataloader(batch_size)
-
-        def initialize_weights(m):
-            if hasattr(m, "weight") and m.weight.dim() > 1:
-                nn.init.xavier_uniform_(m.weight.data)
-
-        self.model.apply(initialize_weights)
 
     def train(self):
         print("===== Traning Info =====")
@@ -102,8 +96,8 @@ class Model:
 
             epoch_loss += loss.item()
 
-        epoch_loss /= len(self.train_loader)
-        epoch_acc = correct / len(self.train_loader)
+        epoch_loss /= self.batch_size * len(self.train_loader)
+        epoch_acc = correct / (self.batch_size * len(self.train_loader))
         print(f"Train Epoch {epoch}")
         print("Train set: \nLoss: {}, Accuracy: {}".format(epoch_loss, epoch_acc))
 
@@ -119,6 +113,7 @@ class Model:
                 image = image.to(DEVICE)
                 label = label.to(DEVICE)
 
+                self.optimizer.zero_grad()
                 output = self.model(txt, txt_mask, image)
 
                 loss = self.criterion(output, label)
@@ -127,7 +122,7 @@ class Model:
                 correct += (pred == label).sum().item()
                 epoch_loss += loss.item()
 
-        epoch_loss /= len(loader)
-        epoch_acc = correct / len(loader)
+        epoch_loss /= self.batch_size * len(loader)
+        epoch_acc = correct / (self.batch_size * len(loader))
         print("Valid set: \nLoss: {}, Accuracy: {}".format(epoch_loss, epoch_acc))
         return epoch_loss
