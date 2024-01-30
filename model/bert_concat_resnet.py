@@ -12,22 +12,39 @@ class BertConcatResnet(nn.Module):
         self.img_model = torchvision.models.resnet18(
             weights=ResNet18_Weights.IMAGENET1K_V1
         )
-        self.txt_linear = nn.Linear(768, 128)
-        self.img_linear = nn.Linear(1000, 128)
-        self.fc = nn.Linear(256, 3)
-        self.relu = nn.ReLU()
 
-    def forward(self, txt, txt_mask, image):
-        img_out = self.img_model(image)
-        img_out = self.img_linear(img_out)
-        img_out = self.relu(img_out)
+        self.txt_fc = nn.Linear(768, 256)
+        self.img_fc = nn.Linear(1000, 256)
 
-        txt_out = self.txt_model(input_ids=txt, attention_mask=txt_mask)  # type: ignore
-        txt_out = txt_out.last_hidden_state[:, 0, :]
-        txt_out.view(txt_out.shape[0], -1)
-        txt_out = self.txt_linear(txt_out)
-        txt_out = self.relu(txt_out)
+        self.fc = nn.Linear(512, 3)
+        self.only_fc = nn.Linear(256, 3)
+        self.activate = nn.LeakyReLU()
 
-        last_out = torch.cat((txt_out, img_out), dim=-1)
-        last_out = self.fc(last_out)
-        return last_out
+    def forward(self, txt, txt_mask, img, ablate):
+        if ablate == 0:  # both
+            img = self.img_model(img)
+            img = self.img_fc(img)
+            img = self.activate(img)
+
+            txt = self.txt_model(input_ids=txt, attention_mask=txt_mask)  # type: ignore
+            txt = txt.last_hidden_state[:, 0, :]  # CLS vector
+            txt.view(txt.shape[0], -1)
+            txt = self.txt_fc(txt)
+            txt = self.activate(txt)
+
+            out = torch.cat((txt, img), dim=-1)
+            out = self.fc(out)
+        elif ablate == 1:  # img only
+            img = self.img_model(img)
+            img = self.img_fc(img)
+            img = self.activate(img)
+            out = self.only_fc(img)
+        else:  # txt only
+            txt = self.txt_model(input_ids=txt, attention_mask=txt_mask)  # type: ignore
+            txt = txt.last_hidden_state[:, 0, :]  # CLS vector
+            txt.view(txt.shape[0], -1)
+            txt = self.txt_fc(txt)
+            txt = self.activate(txt)
+            out = self.only_fc(txt)
+
+        return out

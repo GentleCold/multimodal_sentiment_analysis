@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+from matplotlib import pyplot as plt
 from sklearn.metrics import f1_score, precision_score, recall_score
 from torch import optim
-from torch.nn.utils.clip_grad import clip_grad_norm_
 from tqdm import tqdm
 
 from dataset.data_handler import ID2EMOTION, SEED, DataHandler
@@ -32,11 +32,13 @@ class Model:
         learning_rate=1e-5,
         batch_size=8,
         model="bert_concat_resnet",
+        ablate=0,
     ):
         set_seed(SEED)
 
         self.epochs = max_epochs
         self.batch_size = batch_size
+        self.ablate = ablate
         if model == "bert_concat_resnet":
             self.model = BertConcatResnet().to(DEVICE)
 
@@ -45,6 +47,8 @@ class Model:
         self.data = DataHandler(self.batch_size)
 
     def train(self):
+        self.train_loss = []
+        self.val_accuracy = []
         print("===== Traning Info =====")
         print("Device:", DEVICE)
         print("Batch size:", self.batch_size)
@@ -76,6 +80,14 @@ class Model:
         print(f"F1: {best_metrics[4]}")
         self.model.load_state_dict(torch.load(f"{output_loc}/model.pt"))
 
+        def moving_average(data, window_size):
+            weights = np.repeat(1.0, window_size) / window_size
+            smoothed_data = np.convolve(data, weights, "valid")
+            return smoothed_data
+
+        window_size = 10
+        self.train_loss = moving_average(self.train_loss, window_size)
+
     def _epoch_train(self, epoch):
         self.model.train()
         epoch_loss = 0
@@ -87,7 +99,7 @@ class Model:
             label = label.to(DEVICE)
 
             self.optimizer.zero_grad()
-            output = self.model(txt, txt_mask, image)
+            output = self.model(txt, txt_mask, image, self.ablate)
 
             loss = self.criterion(output, label)
             loss.backward()
@@ -100,6 +112,7 @@ class Model:
             pred = output.argmax(dim=1)
             correct += (pred == label).sum().item()
 
+            self.train_loss.append(loss.item())
             epoch_loss += loss.item()
 
         epoch_loss /= len(self.data.train_loader)
@@ -122,7 +135,7 @@ class Model:
                 label = label.to(DEVICE)
 
                 self.optimizer.zero_grad()
-                output = self.model(txt, txt_mask, image)
+                output = self.model(txt, txt_mask, image, self.ablate)
 
                 loss = self.criterion(output, label)
 
@@ -135,6 +148,7 @@ class Model:
 
         epoch_loss /= len(self.data.val_loader)
         epoch_acc = correct / self.data.val_size
+        self.val_accuracy.append(epoch_acc)
 
         preds = torch.cat(preds).cpu().numpy()
         labels = torch.cat(labels).cpu().numpy()
@@ -162,7 +176,7 @@ class Model:
                 image = image.to(DEVICE)
 
                 self.optimizer.zero_grad()
-                output = self.model(txt, txt_mask, image)
+                output = self.model(txt, txt_mask, image, self.ablate)
                 pred = output.argmax(dim=1)
 
                 guid_list.extend(guid)
