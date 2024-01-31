@@ -4,15 +4,18 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from matplotlib import pyplot as plt
-from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 from torch import optim
 from tqdm import tqdm
 
 from dataset.data_handler import ID2EMOTION, SEED, DataHandler
-from model.bert_concat_resnet import BertConcatResnet
+from model.bert_densenet_with_attention import BertDensenetWithAttention
+from model.bert_densenet_with_concat import BertDensenetWithConcat
+from model.bert_resnet_with_attention import BertResnetWithAttention
+from model.bert_resnet_with_concat import BertResnetWithConcat
 
 output_loc = "./output"
+
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -28,10 +31,10 @@ def set_seed(seed):
 class Model:
     def __init__(
         self,
-        max_epochs=30,
-        learning_rate=1e-5,
-        batch_size=8,
-        model="bert_concat_resnet",
+        max_epochs=10,
+        lr=1e-5,
+        batch_size=16,
+        model=0,
         ablate=0,
     ):
         set_seed(SEED)
@@ -39,10 +42,17 @@ class Model:
         self.epochs = max_epochs
         self.batch_size = batch_size
         self.ablate = ablate
-        if model == "bert_concat_resnet":
-            self.model = BertConcatResnet().to(DEVICE)
+        self.model_type = model
+        if model == 0:
+            self.model = BertResnetWithConcat().to(DEVICE)
+        elif model == 1:
+            self.model = BertResnetWithAttention().to(DEVICE)
+        elif model == 2:
+            self.model = BertDensenetWithConcat().to(DEVICE)
+        elif model == 3:
+            self.model = BertDensenetWithAttention().to(DEVICE)
 
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate)
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=lr)
         self.criterion = nn.CrossEntropyLoss()
         self.data = DataHandler(self.batch_size)
 
@@ -52,9 +62,27 @@ class Model:
         print("===== Traning Info =====")
         print("Device:", DEVICE)
         print("Batch size:", self.batch_size)
+
+        if self.ablate == 0:
+            if self.model_type == 0:
+                print("Model: BertResnetWithConcat")
+            elif self.model_type == 1:
+                print("Model: BertResnetWithCrossAttention")
+            elif self.model_type == 2:
+                print("Model: BertDensenetWithConcat")
+            elif self.model_type == 3:
+                print("Model: BertDensenetWithCrossAttention")
+        elif self.ablate == 1:
+            if self.model_type == 0:
+                print("Model: Resnet Only")
+            elif self.model_type == 2:
+                print("Model: Densenet Only")
+        elif self.ablate == 2:
+            print("Model: Bert only")
+
         print("\n==== Starting Train ====")
 
-        best_metrics = [float("inf")]
+        best_metrics = [float("inf"), 0, 0, 0, 0]
         early_stop_patience = 3
         early_stop_count = 0
         epoch = 0
@@ -62,7 +90,7 @@ class Model:
         for epoch in range(1, self.epochs + 1):
             self._epoch_train(epoch)
             metrics = self._evaluate()
-            if metrics[0] < best_metrics[0]:
+            if metrics[1] > best_metrics[1]:
                 best_metrics = metrics
                 torch.save(self.model.state_dict(), f"{output_loc}/model.pt")
                 early_stop_count = 0
@@ -73,8 +101,7 @@ class Model:
                     break
 
         print(f"The training epoch is {epoch}")
-        print(f"Choose model with best valid loss: {best_metrics[0]}, with:")
-        print(f"Accuracy: {best_metrics[1]}")
+        print(f"Choose model with best accuracy: {best_metrics[1]}, with:")
         print(f"Precision: {best_metrics[2]}")
         print(f"Recall: {best_metrics[3]}")
         print(f"F1: {best_metrics[4]}")
