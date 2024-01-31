@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
+from sklearn.metrics import (accuracy_score, f1_score, precision_score,
+                             recall_score)
 from torch import optim
 from tqdm import tqdm
 
@@ -83,7 +84,7 @@ class Model:
         print("\n==== Starting Train ====")
 
         best_metrics = [float("inf"), 0, 0, 0, 0]
-        early_stop_patience = 3
+        early_stop_patience = 2
         early_stop_count = 0
         epoch = 0
 
@@ -112,7 +113,7 @@ class Model:
             smoothed_data = np.convolve(data, weights, "valid")
             return smoothed_data
 
-        window_size = 10
+        window_size = 15
         self.train_loss = moving_average(self.train_loss, window_size)
 
     def _epoch_train(self, epoch):
@@ -150,7 +151,6 @@ class Model:
     def _evaluate(self):
         self.model.eval()
         epoch_loss = 0
-        correct = 0
         preds = []
         labels = []
 
@@ -167,22 +167,22 @@ class Model:
                 loss = self.criterion(output, label)
 
                 pred = output.argmax(dim=1)
-                correct += (pred == label).sum().item()
                 epoch_loss += loss.item()
 
                 preds.append(pred)
                 labels.append(label)
 
         epoch_loss /= len(self.data.val_loader)
-        epoch_acc = correct / self.data.val_size
-        self.val_accuracy.append(epoch_acc)
 
         preds = torch.cat(preds).cpu().numpy()
         labels = torch.cat(labels).cpu().numpy()
 
-        f1 = f1_score(labels, preds, average="weighted")
-        precision = precision_score(labels, preds, average="weighted")
-        recall = recall_score(labels, preds, average="weighted")
+        epoch_acc = accuracy_score(labels, preds)
+        self.val_accuracy.append(epoch_acc)
+
+        f1 = f1_score(labels, preds, average="macro")
+        precision = precision_score(labels, preds, average="macro")
+        recall = recall_score(labels, preds, average="macro")
         print(
             "Valid set: \nLoss: {}, Accuracy: {}, Precision: {}, Recall: {}, F1: {}".format(
                 epoch_loss, epoch_acc, precision, recall, f1
